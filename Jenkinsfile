@@ -1,76 +1,57 @@
-
 pipeline {
-  agent any
-
-  parameters {
-    string(name: 'BRANCH', defaultValue: 'main', description: 'Git branch to build')
-    booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests?')
-    choice(name: 'ENV', choices: ['dev', 'staging', 'prod'], description: 'Deploy environment')
+  agent {
+    docker {
+      image 'python:3.10'
+      args '--user=root'
+    }
   }
 
   stages {
-
-    stage('Checkout Code') {
+    stage('Checkout') {
       steps {
-        echo "Cloning branch: ${params.BRANCH}"
-        // Simulate git checkout
-        sh 'echo "git clone repo..."'
+        checkout scm
       }
     }
 
-    stage('Build') {
+    stage('Install dependencies') {
       steps {
-        echo "Building application..."
-        sh 'echo "Build successful!"'
+        sh '''
+python -m pip install --upgrade pip
+if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+'''
+      }
+    }
+
+    stage('Lint') {
+      steps {
+        sh '''
+pip install ruff pytest coverage
+ruff --format=github --target-version=py310 . || true
+'''
       }
     }
 
     stage('Test') {
-      when {
-        expression { params.RUN_TESTS }
-      }
-      parallel {
-        stage('Unit Test') {
-          steps {
-            echo "Running unit tests..."
-            sh 'echo "Unit tests passed!"'
-          }
-        }
-        stage('Integration Test') {
-          steps {
-            echo "Running integration tests..."
-            sh 'echo "Integration tests passed!"'
-          }
-        }
+      steps {
+        sh '''
+coverage run -m pytest -v -s
+'''
       }
     }
 
-    stage('Deploy') {
+    stage('Coverage Report') {
       steps {
-        echo "Deploying to ${params.ENV} environment..."
-
-        script {
-          if (params.ENV == 'dev') {
-            sh 'echo "Deploy to DEV server"'
-          } else if (params.ENV == 'staging') {
-            sh 'echo "Deploy to STAGING server"'
-          } else {
-            sh 'echo "Deploy to PRODUCTION server"'
-          }
-        }
+        sh '''
+coverage report -m
+coverage xml -i -o coverage.xml || true
+'''
       }
     }
   }
 
   post {
-    success {
-      echo "Pipeline completed successfully!"
-    }
-    failure {
-      echo "Pipeline failed!"
-    }
     always {
-      echo "Cleaning workspace..."
+      archiveArtifacts artifacts: 'coverage.xml, htmlcov/**', allowEmptyArchive: true
       cleanWs()
     }
   }
