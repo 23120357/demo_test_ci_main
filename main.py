@@ -1,4 +1,3 @@
-
 # Chương trình tính tổng và trung bình của dãy số
 def calculate_sum_and_average(numbers):
     if not numbers:
